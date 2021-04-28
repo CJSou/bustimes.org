@@ -4,8 +4,8 @@
 """
 
 import re
-from django.contrib.gis.geos import Point
 from titlecase import titlecase
+from django.contrib.gis.geos import Point
 from ..import_from_csv import ImportFromCSVCommand
 from ...models import Locality, StopPoint
 
@@ -86,34 +86,43 @@ def correct_case(value):
     return value
 
 
+def to_camel_case(field_name):
+    """
+    Given a string like 'naptan_code', returns a string like 'NaptanCode'
+    """
+    return ''.join(s.title() for s in field_name.split('_'))
+
+
 class Command(ImportFromCSVCommand):
-    input = 0
-    encoding = 'windows-1252'
-
     def handle_row(self, row):
-        defaults = {
-            'locality_centre': (row['LocalityCentre'] == '1'),
-            'active': (row.get('Status', 'act') == 'act'),
-            'admin_area_id': row.get('AdministrativeAreaCode') or row['AdministrativeAreaRef']
-        }
-
         atco_code = row.get('ATCOCode') or row['AtcoCode']
+        if atco_code in self.existing_stops:
+            stop = self.existing_stops[atco_code]
+            create = False
+        else:
+            stop = StopPoint(atco_code=atco_code)
+            create = True
+
+        stop.locality_centre = (row['LocalityCentre'] == '1')
+        stop.active = (row.get('Status', 'act') == 'act')
+        stop.admin_area_id = row.get('AdministrativeAreaCode') or row['AdministrativeAreaRef']
 
         if row['Longitude'] and float(row['Longitude']) != 0:
-            defaults['latlong'] = Point(
+            stop.latlong = Point(
                 float(row['Longitude']),
                 float(row['Latitude']),
                 srid=4326  # World Geodetic System
             )
         elif row['Easting']:
-            defaults['latlong'] = Point(int(row['Easting']), int(row['Northing']), srid=27700)
+            stop.latlong = Point(int(row['Easting']), int(row['Northing']), srid=27700)
 
         if 'NptgLocalityCode' in row:
-            defaults['locality_id'] = row['NptgLocalityCode']
+            stop.locality_id = row['NptgLocalityCode']
         elif row['NptgLocalityRef']:
-            defaults['locality_id'] = row['NptgLocalityRef']
-            if not Locality.objects.filter(pk=defaults['locality_id']).exists():
-                Locality.objects.create(pk=defaults['locality_id'], admin_area_id=defaults['admin_area_id'])
+            # Ireland
+            stop.locality_id = row['NptgLocalityRef']
+            if not Locality.objects.filter(pk=stop.locality_id).exists():
+                Locality.objects.create(pk=stop.locality_id, admin_area_id=stop.admin_area_id)
 
         for django_field_name, naptan_field_name in self.field_names:
             if naptan_field_name not in row:
@@ -127,33 +136,31 @@ class Command(ImportFromCSVCommand):
                     value = ''
                 elif django_field_name != 'indicator' and value.isupper():
                     value = correct_case(value)
-            defaults[django_field_name] = value.replace('`', '\'')  # replace backticks
+            value = value.replace('`', '\'')  # replace backticks
+            setattr(stop, django_field_name, value)
 
-        if defaults.get('indicator').lower() in INDICATORS_TO_REPLACE:
-            defaults['indicator'] = INDICATORS_TO_REPLACE.get(
-                defaults['indicator'].lower()
-            )
-        elif defaults['indicator'].lower() in INDICATORS_TO_PROPER_CASE:
-            defaults['indicator'] = INDICATORS_TO_PROPER_CASE.get(
-                defaults['indicator'].lower()
-            )
-        elif defaults['indicator'].startswith('220'):
-            defaults['indicator'] = ''
+        lower_indicator = stop.indicator.lower()
+        if lower_indicator in INDICATORS_TO_REPLACE:
+            stop.indicator = INDICATORS_TO_REPLACE[lower_indicator]
+        elif lower_indicator.lower() in INDICATORS_TO_PROPER_CASE:
+            stop.indicator = INDICATORS_TO_PROPER_CASE[lower_indicator]
+        elif stop.indicator.startswith('220'):
+            stop.indicator = ''
 
-        if defaults['stop_type'] == 'class_undefined':
-            defaults['stop_type'] = ''
-        if defaults['bus_stop_type'] == 'type_undefined':
-            defaults['bus_stop_type'] = ''
+        if stop.stop_type == 'class_undefined':
+            stop.stop_type = ''
+        if stop.bus_stop_type == 'type_undefined':
+            stop.bus_stop_type = ''
 
         if 'CompassPoint' in row:
-            defaults['bearing'] = row['CompassPoint']
+            stop.bearing = row['CompassPoint']
 
-        StopPoint.objects.update_or_create(atco_code=atco_code, defaults=defaults)
+        return stop, create
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def handle_rows(self, rows):
+        rows = list(rows)
 
-        django_field_names = (
+        django_field_names = [
             'naptan_code',
             'common_name',
             'landmark',
@@ -166,6 +173,23 @@ class Command(ImportFromCSVCommand):
             'timing_status',
             'town',
             'bearing',
-        )
+        ]
         # A list of tuples like ('naptan_code', 'NaptanCode')
-        self.field_names = [(name, self.to_camel_case(name)) for name in django_field_names]
+        self.field_names = [(name, to_camel_case(name)) for name in django_field_names]
+
+        stop_codes = [row.get('ATCOCode') or row['AtcoCode'] for row in rows]
+        self.existing_stops = StopPoint.objects.in_bulk(stop_codes)
+        to_update = []
+        to_create = []
+
+        for row in rows:
+            stop, create = self.handle_row(row)
+            if create:
+                to_create.append(stop)
+            else:
+                to_update.append(stop)
+
+        StopPoint.objects.bulk_create(to_create)
+        StopPoint.objects.bulk_update(to_update, fields=[
+            'locality_centre', 'active', 'admin_area', 'latlong', 'locality'
+        ] + django_field_names)
