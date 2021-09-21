@@ -21,10 +21,12 @@ from django.core.paginator import Paginator
 from django.contrib.sitemaps import Sitemap
 from django.core.cache import cache
 from django.core.mail import EmailMessage
+
 from departures import live
 from disruptions.models import Situation, Consequence
 from fares.forms import FaresForm
-from vehicles.models import Vehicle, VehicleLocation
+from vehicles.models import Vehicle
+from vehicles.utils import has_locations
 from bustimes.models import get_routes
 from .utils import get_bounding_box
 from .models import (Region, StopPoint, AdminArea, Locality, District, Operator,
@@ -502,17 +504,17 @@ class OperatorDetailView(DetailView):
         context['services'] = sorted(services, key=Service.get_order)
         context['today'] = timezone.localdate()
 
-        vehicles = self.object.vehicle_set.filter(withdrawn=False)
-
-        context['vehicles'] = vehicles.exists()
+        vehicles = self.object.vehicle_set.filter(
+            withdrawn=False, latest_journey_id__isnull=False
+        ).only('operator_id', 'latest_journey_id')
+        if vehicles:
+            context['map'] = has_locations(vehicles)
+            context['vehicles'] = True
 
         if context['services']:
             context['breadcrumb'] = [self.object.region]
 
             context['colours'] = get_colours(context['services'])
-
-        if context['vehicles']:
-            context['map'] = vehicles.filter(latest_location__isnull=False).exists()
 
         return context
 

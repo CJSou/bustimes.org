@@ -120,12 +120,10 @@ class VehicleAdmin(admin.ModelAdmin):
                 first = vehicle
             else:
                 vehicle.vehiclejourney_set.update(vehicle=first)
-                first.latest_location = vehicle.latest_location
                 first.latest_journey = vehicle.latest_journey
-                vehicle.latest_location = None
                 vehicle.latest_journey = None
-                vehicle.save(update_fields=['latest_location', 'latest_journey'])
-                first.save(update_fields=['latest_location', 'latest_journey'])
+                vehicle.save(update_fields=['latest_journey'])
+                first.save(update_fields=['latest_journey'])
                 first.code = vehicle.code
                 first.fleet_code = vehicle.fleet_code
                 first.fleet_number = vehicle.fleet_number
@@ -418,17 +416,6 @@ class VehicleJourneyAdmin(admin.ModelAdmin):
     )
     show_full_result_count = False
     ordering = ('-id',)
-
-
-@admin.register(models.VehicleLocation)
-class VehicleLocationAdmin(admin.ModelAdmin):
-    raw_id_fields = ['journey']
-    list_display = ['datetime', '__str__']
-    list_select_related = ['journey']
-    list_filter = [
-        'occupancy',
-        ('journey__source', admin.RelatedOnlyFieldListFilter),
-    ]
 
 
 @admin.register(models.JourneyCode)

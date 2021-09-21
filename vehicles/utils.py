@@ -11,6 +11,10 @@ def flush_redis():
     redis_client.flushall()
 
 
+def has_locations(vehicles):
+    return redis_client.exists(*[f'journey{vehicle.latest_journey_id}' for vehicle in vehicles])
+
+
 def get_vehicle_edit(vehicle, fields, now, request):
     edit = VehicleEdit(vehicle=vehicle, datetime=now)
 

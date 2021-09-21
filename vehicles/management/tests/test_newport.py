@@ -33,6 +33,5 @@ class MegabusTest(TestCase):
         vehicle = Vehicle.objects.get()
         self.assertEqual('352', str(vehicle))
 
-        self.assertEqual('14 Jul 2021 18:52:43', str(vehicle.latest_location))
         self.assertEqual('14 Jul 21 18:00 T7 1900  to Queens Hills', str(vehicle.latest_journey))
         self.assertIsNotNone(vehicle.latest_journey.data)

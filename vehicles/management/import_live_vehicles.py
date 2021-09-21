@@ -248,25 +248,12 @@ class ImportLiveVehiclesCommand(BaseCommand):
                     journey.service.tracking = True
                     journey.service.save(update_fields=['tracking'])
 
-        if not location.id:
-            location.id = vehicle.latest_location_id
         location.journey = journey
         location.current = True
 
-        to_update = False
-
-        if not location.id:
-            location.save()
-            vehicle.latest_location = location
-            to_update = True
-
-        vehicle.withdrawn = False
-
-        if vehicle.latest_journey_id != journey.id:
+        if vehicle.latest_journey_id != journey.id or vehicle.withdrawn:
             vehicle.latest_journey = journey
-            to_update = True
-
-        if to_update:
+            vehicle.withdrawn = False
             self.vehicles_to_update.append(vehicle)
 
         self.to_save.append((location, vehicle))
@@ -276,7 +263,7 @@ class ImportLiveVehiclesCommand(BaseCommand):
             return
 
         if self.vehicles_to_update:
-            Vehicle.objects.bulk_update(self.vehicles_to_update, ['latest_journey', 'latest_location', 'withdrawn'])
+            Vehicle.objects.bulk_update(self.vehicles_to_update, ['latest_journey', 'withdrawn'])
             self.vehicles_to_update = []
 
         pipeline = redis_client.pipeline(transaction=False)

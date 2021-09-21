@@ -1,6 +1,6 @@
 from django.test import TestCase
 from busstops.models import DataSource, Region, Operator
-from .models import VehicleLocation
+from .models import VehicleJourney
 
 
 class SiriSubscriptionReceiveTest(TestCase):
@@ -93,5 +93,5 @@ class SiriSubscriptionReceiveTest(TestCase):
         with self.assertNumQueries(18):
             self.client.post('/siri', xml, content_type='text/xml')
 
-        location = VehicleLocation.objects.first()
-        self.assertEqual(location.journey.code, '2')
+        journey = VehicleJourney.objects.get()
+        self.assertEqual(journey.journey.code, '2')

@@ -47,7 +47,6 @@ class VehiclesTests(TestCase):
 
         cls.location = VehicleLocation.objects.create(datetime=cls.datetime, latlong=Point(0, 51),
                                                       journey=cls.journey, current=True)
-        # cls.vehicle_1.latest_location = cls.location
         cls.vehicle_1.latest_journey = cls.journey
         cls.vehicle_1.save()
 

@@ -4,7 +4,7 @@ from django.core.cache import cache
 from vcr import use_cassette
 from django.test import TestCase, override_settings
 from busstops.models import Region, DataSource, Operator, OperatorCode, StopPoint, Locality, AdminArea
-from ...models import VehicleLocation, VehicleJourney
+from ...models import VehicleJourney
 from ...workers import SiriConsumer
 from ...utils import flush_redis
 from ..commands import import_bod_avl, import_bod_avl_channels
@@ -136,18 +136,17 @@ class BusOpenDataVehicleLocationsTest(TestCase):
                 "items": items
             })
 
-        self.assertEqual(3, VehicleLocation.objects.all().count())
+        self.assertEqual(3, VehicleJourney.objects.all().count())
 
-        location = VehicleLocation.objects.all()[1]
-        self.assertEqual(location.journey.route_name, '843X')
-        self.assertEqual(location.journey.destination, 'Soho Road')
-        self.assertEqual(location.journey.vehicle.reg, 'SN56AFE')
+        journey = VehicleJourney.objects.all()[1]
+        self.assertEqual(journey.route_name, '843X')
+        self.assertEqual(journey.destination, 'Soho Road')
+        self.assertEqual(journey.vehicle.reg, 'SN56AFE')
 
-        location = VehicleLocation.objects.all()[2]
-        self.assertEqual(location.heading, 92)
-        self.assertEqual(location.journey.vehicle.operator_id, 'HAMS')
-        self.assertEqual(location.journey.vehicle.reg, 'DW18HAM')
-        self.assertEqual(location.journey.vehicle.reg, 'DW18HAM')
+        location = VehicleJourney.objects.all()[2]
+        self.assertEqual(journey.vehicle.operator_id, 'HAMS')
+        self.assertEqual(journey.vehicle.reg, 'DW18HAM')
+        self.assertEqual(journey.vehicle.reg, 'DW18HAM')
 
         # test operator map
         with self.assertNumQueries(1):
@@ -241,7 +240,7 @@ class BusOpenDataVehicleLocationsTest(TestCase):
              'direction': 142}]})
 
         vehicle = journey.vehicle
-        location = VehicleLocation.objects.get()
+        # location = VehicleLocation.objects.get()
 
         with self.assertNumQueries(0):
             response = self.client.get('/vehicles.json?xmax=984.375&xmin=694.688&ymax=87.043&ymin=-89.261')
@@ -254,7 +253,7 @@ class BusOpenDataVehicleLocationsTest(TestCase):
         with self.assertNumQueries(1):
             response = self.client.get('/vehicles.json?ymax=52.4&xmax=1.7&ymin=52.3&xmin=1.6')
         self.assertEqual(response.json(), [
-            {'id': location.id, 'coordinates': [1.675893, 52.328398],
+            {'id': vehicle.id, 'coordinates': [1.675893, 52.328398],
              'vehicle': {'url': f'/vehicles/{vehicle.id}', 'name': '104 - BB62 BUS'},
              'heading': 142, 'datetime': '2020-11-28T15:07:06Z', 'destination': 'Southwold',
              'service': {'line_name': '146'}}
@@ -263,7 +262,7 @@ class BusOpenDataVehicleLocationsTest(TestCase):
         with self.assertNumQueries(1):
             response = self.client.get('/vehicles.json')
         self.assertEqual(response.json(), [
-            {'id': location.id, 'coordinates': [1.675893, 52.328398],
+            {'id': vehicle.id, 'coordinates': [1.675893, 52.328398],
              'vehicle': {'url': f'/vehicles/{vehicle.id}', 'name': '104 - BB62 BUS'},
              'heading': 142, 'datetime': '2020-11-28T15:07:06Z', 'destination': 'Southwold',
              'service': {'line_name': '146'}}
@@ -317,11 +316,9 @@ class BusOpenDataVehicleLocationsTest(TestCase):
 
         command.save()
 
-        location = VehicleLocation.objects.get()
-
         response = self.client.get('/vehicles.json')
         self.assertEqual(response.json(), [{
-            "id": location.id, "coordinates": [-1.586568, 55.084628],
+            "id": vehicle.id, "coordinates": [-1.586568, 55.084628],
             "vehicle": {
                 "url": f"/vehicles/{location.vehicle.id}",
                 "name": "626"

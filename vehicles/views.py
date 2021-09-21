@@ -26,7 +26,7 @@ from bustimes.models import Garage, Trip
 from disruptions.views import siri_sx
 from .models import Vehicle, VehicleJourney, VehicleEdit, VehicleEditFeature, VehicleRevision, Livery
 from .forms import EditVehiclesForm, EditVehicleForm
-from .utils import redis_client, get_vehicle_edit, do_revision, do_revisions
+from .utils import redis_client, has_locations, get_vehicle_edit, do_revision, do_revisions
 from .management.commands import import_bod_avl
 
 
@@ -214,7 +214,7 @@ def operator_vehicles(request, slug=None, parent=None):
     }
 
     if not parent and not form:
-        context['map'] = any(vehicle.latest_location_id for vehicle in vehicles)
+        context['map'] = has_locations(vehicles)
 
     return render(request, 'operator_vehicles.html', context)
 
