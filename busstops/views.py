@@ -563,13 +563,19 @@ class ServiceDetailView(DetailView):
                     date = datetime.date.fromisoformat(date)
                 except ValueError:
                     date = None
+            calendar = self.request.GET.get('calendar')
+            if calendar:
+                try:
+                    calendar = int(calendar)
+                except ValueError:
+                    calendar = None
             if context['related']:
                 parallel = self.object.get_linked_services()
                 context['linked_services'] = parallel
             else:
                 parallel = []
             detailed = 'detailed' in self.request.GET
-            timetable = self.object.get_timetable(date, parallel, detailed)
+            timetable = self.object.get_timetable(day=date, calendar_id=calendar, related=parallel, detailed=detailed)
             if timetable and timetable.routes:
 
                 if timetable.date or timetable.groupings:
@@ -716,10 +722,13 @@ class ServiceDetailView(DetailView):
 def service_timetable(request, service_id):
     service = get_object_or_404(Service.objects.defer('geometry'), id=service_id)
     date = request.GET.get('date')
+    calendar = request.GET.get('calendar')
     if date:
         date = datetime.date.fromisoformat(date)
+    elif calendar:
+        calendar = int(calendar)
     parallel = service.get_linked_services()
-    timetable = service.get_timetable(date, parallel)
+    timetable = service.get_timetable(day=date, calendar_id=calendar, related=parallel)
     stops = StopPoint.objects.select_related('locality').defer('latlong', 'locality__latlong')
     stop_codes = (row.stop.atco_code for grouping in timetable.groupings for row in grouping.rows)
     stops = stops.in_bulk(stop_codes)
