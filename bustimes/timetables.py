@@ -131,7 +131,7 @@ def compare_trips(rows, trip_ids, a, b):
 
 
 class Timetable:
-    def __init__(self, routes, date, detailed=False):
+    def __init__(self, routes, date, calendar_id=None, detailed=False):
         self.today = localdate()
 
         routes = list(routes.select_related('source'))
@@ -154,18 +154,38 @@ class Timetable:
             trip__route__in=self.routes
         ).distinct().prefetch_related('calendardate_set')
 
-        if not date and len(self.calendars) == 1 and len(routes) == 1:
-            calendar = self.calendars[0]
-            # calendar has a summary like 'school days only', or no exceptions within 21 days
-            if calendar.is_sufficiently_simple(self.today + datetime.timedelta(days=21)):
-                self.calendar = calendar
-                if calendar.start_date > self.today:  # starts in the future
-                    self.start_date = calendar.start_date
+        if not date and len(routes) == 1 and self.calendars:
+            if len(self.calendars) == 1:
+                calendar = self.calendars[0]
+                # calendar has a summary like 'school days only', or no exceptions within 21 days
+                if calendar.is_sufficiently_simple(self.today + datetime.timedelta(days=21)):
+                    self.calendar = calendar
+                    if calendar.start_date > self.today:  # starts in the future
+                        self.start_date = calendar.start_date
 
-                    # in case a Friday only service has a start_date that's a Sunday, for example:
-                    for date in self.get_date_options():
-                        self.start_date = date
-                        break
+                        # in case a Friday only service has a start_date that's a Sunday, for example:
+                        for date in self.get_date_options():
+                            self.start_date = date
+                            break
+
+            else:
+                calendars_overlap = False
+                days = set()
+                for calendar in self.calendars:
+                    for day in calendar.get_days():
+                        if day in days:
+                            calendars_overlap = True
+                            self.calendar = None
+                            break
+                        days.add(day)
+                    if calendar.id == calendar_id:
+                        self.calendar = calendar
+
+                if not calendars_overlap:
+                    self.calendar_options = list(self.calendars)
+                    self.calendar_options.sort(key=Calendar.get_order)
+                    if not self.calendar:
+                        self.calendar = self.calendar_options[0]
 
         if self.calendars and not self.calendar:
             self.date_options = list(self.get_date_options())
@@ -188,6 +208,8 @@ class Timetable:
                 trips = trips.filter(Exists(get_calendars(self.date, calendar_ids).filter(trip=OuterRef('id'))))
             else:
                 trips = trips.filter(calendar=None)
+        elif self.calendar_options:
+            trips = trips.filter(calendar=self.calendar)
 
         trips = trips.defer(
             'route__service__geometry'
